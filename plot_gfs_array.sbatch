@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=gfs_plot
-#SBATCH --output=plots_%A_%a.out
-#SBATCH --error=plots_%A_%a.err
+#SBATCH --output=log.plots.%A_%a.out
+#SBATCH --error=log.plots.%A_%a.err
 #SBATCH --time=02:00:00
 #SBATCH --ntasks=1
 #SBATCH --mem=4G

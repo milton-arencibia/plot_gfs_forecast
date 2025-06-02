@@ -5,8 +5,7 @@ import cartopy.feature as cfeature
 import os
 import sys
 
-def plot_forecast_hour(forecast_hour, pressure_levels=[500], input_dir='.', output_dir='level_plots'):
-    # Format forecast hour with zero-padding (e.g., 6 -> '006')
+def plot_forecast_hour(forecast_hour, pressure_levels=[500], input_dir='.', base_output_dir='level_plots'):
     fh_str = f"{forecast_hour:03d}"
     grib_file = os.path.join(input_dir, f"gfs.t00z.pgrb2.0p25.f{fh_str}")
 
@@ -15,17 +14,24 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500], input_dir='.', outp
         return
 
     print(f"\nProcessing forecast hour: {forecast_hour} (file: {grib_file})")
+
+    grbs = pygrib.open(grib_file)
+
+    # Extract the forecast date for output directory naming
+    try:
+        first_msg = grbs.message(1)
+        yyyymmdd = str(first_msg.dataDate)
+    except:
+        yyyymmdd = "unknown"
+
+    output_dir = f"{yyyymmdd}_{base_output_dir}"
     os.makedirs(output_dir, exist_ok=True)
 
-    # Variables to plot with settings
     variables = {
-        # Surface-related and heightAboveGround first
         'Convective available potential energy': {'units': 'J/kg', 'cmap': 'YlGnBu', 'level_type': 'surface'},
         '2 metre temperature': {'units': '°C', 'cmap': 'coolwarm', 'convert': lambda x: x - 273.15, 'level_type': 'heightAboveGround'},
         '2 metre relative humidity': {'units': '%', 'cmap': 'BrBG', 'level_type': 'heightAboveGround'},
         'Precipitation rate': {'units': 'kg/m^2/s', 'cmap': 'Blues', 'level_type': 'surface'},
-
-        # Isobaric level variables
         'Temperature': {'units': '°C', 'cmap': 'coolwarm', 'convert': lambda x: x - 273.15, 'level_type': 'isobaricInhPa'},
         'Geopotential height': {'units': 'm', 'cmap': 'viridis', 'level_type': 'isobaricInhPa'},
         'U component of wind': {'units': 'm/s', 'cmap': 'RdBu_r', 'level_type': 'isobaricInhPa'},
@@ -33,20 +39,15 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500], input_dir='.', outp
         'Vertical velocity': {'units': 'Pa/s', 'cmap': 'bwr', 'level_type': 'isobaricInhPa'},
     }
 
-    grbs = pygrib.open(grib_file)
     field_data = {var: [] for var in variables}
-
-    # Cache lat/lon for each variable to avoid recomputing
     latlon_cache = {}
 
-    # Collect GRIB messages by variable and level type
     for grb in grbs:
         name = grb.name
         if name in variables:
             if grb.typeOfLevel == variables[name]['level_type']:
                 field_data[name].append(grb)
 
-    # Plot surface and near-surface fields (no level selection)
     print("\n📍 Plotting surface and near-surface fields...")
     for varname, settings in variables.items():
         if settings['level_type'] not in ['surface', 'heightAboveGround']:
@@ -59,12 +60,10 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500], input_dir='.', outp
 
         grb = grbs_list[0]
         level_label = f"{grb.level}m" if settings['level_type'] == 'heightAboveGround' else "surface"
-
         data = grb.values
         if 'convert' in settings:
             data = settings['convert'](data)
 
-        # Cache lat/lon once per variable
         if varname not in latlon_cache:
             latlon_cache[varname] = grb.latlons()
         lats, lons = latlon_cache[varname]
@@ -85,14 +84,12 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500], input_dir='.', outp
         plt.close()
         print(f"  ✅ Saved: {fname}")
 
-    # Plot isobaric variables at selected levels
     def get_grb(grbs_list, level):
         for grb in grbs_list:
             if grb.level == level:
                 return grb
         return None
 
-    # Determine available pressure levels from temperature field (optional check)
     temperature_grbs = field_data['Temperature']
     available_levels = sorted({grb.level for grb in temperature_grbs})
     if not available_levels:
@@ -100,7 +97,6 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500], input_dir='.', outp
         grbs.close()
         return
 
-    # If user requested levels not in file, warn
     missing_levels = [lvl for lvl in pressure_levels if lvl not in available_levels]
     if missing_levels:
         print(f"Warning: Some requested pressure levels not found in file: {missing_levels}")
@@ -143,9 +139,7 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500], input_dir='.', outp
 
     grbs.close()
 
-
 if __name__ == "__main__":
-    # Command-line args: start_hr end_hr step_hr
     if len(sys.argv) == 4:
         try:
             start_hr = int(sys.argv[1])
@@ -156,7 +150,6 @@ if __name__ == "__main__":
             print(f"Invalid arguments: {e}")
             sys.exit(1)
     else:
-        # Default forecast hour(s)
         forecast_hours = [0, 6, 12]
 
     for fh in forecast_hours:
