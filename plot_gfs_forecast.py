@@ -17,7 +17,6 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500], input_dir='.', base
 
     grbs = pygrib.open(grib_file)
 
-    # Extract the forecast date for output directory naming
     try:
         first_msg = grbs.message(1)
         yyyymmdd = str(first_msg.dataDate)
@@ -140,18 +139,19 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500], input_dir='.', base
     grbs.close()
 
 if __name__ == "__main__":
-    if len(sys.argv) == 4:
+    if len(sys.argv) < 2:
+        print("Usage: python plot_gfs_forecast.py <forecast_hour> [pressure_levels]")
+        sys.exit(1)
+
+    forecast_hour = int(sys.argv[1])
+    if len(sys.argv) >= 3:
         try:
-            start_hr = int(sys.argv[1])
-            end_hr = int(sys.argv[2])
-            step_hr = int(sys.argv[3])
-            forecast_hours = list(range(start_hr, end_hr + 1, step_hr))
+            pressure_levels = [int(x) for x in sys.argv[2].split(',')]
         except Exception as e:
-            print(f"Invalid arguments: {e}")
+            print(f"❌ Invalid pressure levels: {e}")
             sys.exit(1)
     else:
-        forecast_hours = [0, 6, 12]
+        pressure_levels = [500]
 
-    for fh in forecast_hours:
-        plot_forecast_hour(fh, pressure_levels=[500, 850, 250])
+    plot_forecast_hour(forecast_hour, pressure_levels)
 
