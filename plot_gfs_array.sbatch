@@ -35,4 +35,4 @@ echo "📋 Pressure levels: $pressure_levels"
 
 # Call the plotting script
 python -u plot_gfs_forecast.py "$forecast_hour" "$pressure_levels"
-
+#python -u plot_gfs_analysis.py "$forecast_hour" "$pressure_levels"
