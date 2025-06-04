@@ -2,6 +2,7 @@ import pygrib
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from cartopy.util import add_cyclic_point
 import os
 import sys
 import datetime
@@ -10,10 +11,9 @@ import datetime
 start_date = datetime.datetime(2025, 4, 1, 0)
 end_date = datetime.datetime(2025, 4, 15, 23)
 gfs_anl_dir = "/scratch1/NCEPDEV/global/glopara/data/metplus.data/archive/gfs/"
-base_output_dir = "level_plots"
+base_output_dir = "gfs_anl"
 
 def plot_forecast_hour(forecast_hour, pressure_levels=[500]):
-    # Calculate valid datetime
     forecast_datetime = start_date + datetime.timedelta(hours=forecast_hour)
 
     if forecast_datetime > end_date:
@@ -37,16 +37,14 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500]):
     except:
         yyyymmdd = forecast_datetime.strftime('%Y%m%d')
 
-    output_dir = f"{yyyymmdd}_{base_output_dir}"
+    output_dir = f"{base_output_dir}_{yyyymmdd}"
     os.makedirs(output_dir, exist_ok=True)
 
-    # --- Variable definitions ---
     variables = {
-        'Convective available potential energy': {'units': 'J/kg', 'cmap': 'YlGnBu', 'level_type': 'surface'},
-        '2 metre temperature': {'units': '°C', 'cmap': 'coolwarm', 'convert': lambda x: x - 273.15, 'level_type': 'heightAboveGround'},
-        '2 metre relative humidity': {'units': '%', 'cmap': 'BrBG', 'level_type': 'heightAboveGround'},
+#        'Convective available potential energy': {'units': 'J/kg', 'cmap': 'YlGnBu', 'level_type': 'surface'},
         'Precipitation rate': {'units': 'kg/m^2/s', 'cmap': 'Blues', 'level_type': 'surface'},
         'Temperature': {'units': '°C', 'cmap': 'coolwarm', 'convert': lambda x: x - 273.15, 'level_type': 'isobaricInhPa'},
+        'Relative humidity': {'units': '%', 'cmap': 'BrBG', 'level_type': 'isobaricInhPa'},
         'Geopotential height': {'units': 'm', 'cmap': 'viridis', 'level_type': 'isobaricInhPa'},
         'U component of wind': {'units': 'm/s', 'cmap': 'RdBu_r', 'level_type': 'isobaricInhPa'},
         'V component of wind': {'units': 'm/s', 'cmap': 'RdBu_r', 'level_type': 'isobaricInhPa'},
@@ -61,9 +59,9 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500]):
         if name in variables and grb.typeOfLevel == variables[name]['level_type']:
             field_data[name].append(grb)
 
-    print("\n📍 Plotting surface and near-surface fields...")
+    print("\n📍 Plotting surface fields...")
     for varname, settings in variables.items():
-        if settings['level_type'] not in ['surface', 'heightAboveGround']:
+        if settings['level_type'] != 'surface':
             continue
 
         grbs_list = field_data[varname]
@@ -72,12 +70,14 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500]):
             continue
 
         grb = grbs_list[0]
-        level_label = f"{grb.level}m" if settings['level_type'] == 'heightAboveGround' else "surface"
+        level_label = "surface"
         data = settings.get('convert', lambda x: x)(grb.values)
 
         if varname not in latlon_cache:
             latlon_cache[varname] = grb.latlons()
         lats, lons = latlon_cache[varname]
+
+        data_cyclic, lon_cyclic = add_cyclic_point(data, coord=lons[0])
 
         plt.figure(figsize=(10, 6))
         ax = plt.axes(projection=ccrs.PlateCarree())
@@ -86,7 +86,7 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500]):
         ax.add_feature(cfeature.BORDERS, linestyle=':')
         ax.add_feature(cfeature.STATES, linestyle=':')
 
-        cf = plt.contourf(lons, lats, data, levels=20, cmap=settings['cmap'], transform=ccrs.PlateCarree())
+        cf = plt.contourf(lon_cyclic, lats[:, 0], data_cyclic, levels=20, cmap=settings['cmap'], transform=ccrs.PlateCarree())
         plt.colorbar(cf, orientation='horizontal', pad=0.05, label=f"{varname} ({settings['units']})")
 
         fname = f"{varname.replace(' ', '_').lower()}_{level_label}_f{forecast_hour:03d}.png"
@@ -97,7 +97,6 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500]):
     def get_grb(grbs_list, level):
         return next((grb for grb in grbs_list if grb.level == level), None)
 
-    # --- Isobaric fields ---
     temperature_grbs = field_data['Temperature']
     available_levels = sorted({grb.level for grb in temperature_grbs})
     if not available_levels:
@@ -127,6 +126,8 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500]):
                 latlon_cache[varname] = grb.latlons()
             lats, lons = latlon_cache[varname]
 
+            data_cyclic, lon_cyclic = add_cyclic_point(data, coord=lons[0])
+
             plt.figure(figsize=(10, 6))
             ax = plt.axes(projection=ccrs.PlateCarree())
             ax.set_title(f"{varname} at {level} hPa\nValid: {grb.validDate}")
@@ -134,7 +135,7 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500]):
             ax.add_feature(cfeature.BORDERS, linestyle=':')
             ax.add_feature(cfeature.STATES, linestyle=':')
 
-            cf = plt.contourf(lons, lats, data, levels=20, cmap=settings['cmap'], transform=ccrs.PlateCarree())
+            cf = plt.contourf(lon_cyclic, lats[:, 0], data_cyclic, levels=20, cmap=settings['cmap'], transform=ccrs.PlateCarree())
             plt.colorbar(cf, orientation='horizontal', pad=0.05, label=f"{varname} ({settings['units']})")
 
             fname = f"{varname.replace(' ', '_').lower()}_{level}hPa_f{forecast_hour:03d}.png"
