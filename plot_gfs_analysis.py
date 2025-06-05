@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from cartopy.util import add_cyclic_point
+import numpy as np
 import os
 import sys
 import datetime
@@ -41,7 +42,6 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500]):
     os.makedirs(output_dir, exist_ok=True)
 
     variables = {
-#        'Convective available potential energy': {'units': 'J/kg', 'cmap': 'YlGnBu', 'level_type': 'surface'},
         'Precipitation rate': {'units': 'kg/m^2/s', 'cmap': 'Blues', 'level_type': 'surface'},
         'Temperature': {'units': '°C', 'cmap': 'coolwarm', 'convert': lambda x: x - 273.15, 'level_type': 'isobaricInhPa'},
         'Relative humidity': {'units': '%', 'cmap': 'BrBG', 'level_type': 'isobaricInhPa'},
@@ -142,6 +142,42 @@ def plot_forecast_hour(forecast_hour, pressure_levels=[500]):
             plt.savefig(os.path.join(output_dir, fname), dpi=150)
             plt.close()
             print(f"  ✅ Saved: {fname}")
+
+    # === ZONAL MEAN WIND PLOTS ===
+    print("\n📍 Plotting zonal mean winds...")
+    for comp in ['U component of wind', 'V component of wind']:
+        levels = []
+        latitudes = None
+        zonal_means = []
+
+        for grb in sorted(field_data[comp], key=lambda g: g.level):
+            data = grb.values
+            lats, _ = grb.latlons()
+            zonal_mean = np.mean(data, axis=1)  # mean over longitude
+            zonal_means.append(zonal_mean)
+            levels.append(grb.level)
+            if latitudes is None:
+                latitudes = lats[:, 0]
+
+        if not zonal_means:
+            print(f"  ❌ No zonal means available for {comp}")
+            continue
+
+        zonal_means = np.array(zonal_means)
+        levels = np.array(levels)
+
+        plt.figure(figsize=(10, 6))
+        cf = plt.contourf(latitudes, levels, zonal_means, levels=20, cmap=variables[comp]['cmap'])
+        plt.gca().invert_yaxis()
+        plt.colorbar(cf, orientation='horizontal', pad=0.05, label=f"{comp} ({variables[comp]['units']})")
+        plt.title(f"Zonal Mean {comp}\nValid: {forecast_datetime}")
+        plt.xlabel("Latitude")
+        plt.ylabel("Pressure Level (hPa)")
+
+        fname = f"zonal_mean_{comp.split()[0].lower()}_f{forecast_hour:03d}.png"
+        plt.savefig(os.path.join(output_dir, fname), dpi=150)
+        plt.close()
+        print(f"  ✅ Saved: {fname}")
 
     grbs.close()
 

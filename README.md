@@ -14,3 +14,5 @@ Instructions:
     for 24H at 6H intervals with isobaric levels 500, 800 hPa
 
     Add additional fields by modifying plot_gfs_forecast.py. Use the tool inspect_grib.py to view structure of GRIB and determine vertical Level Type for new fields.
+
+    
